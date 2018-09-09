@@ -1,3 +1,5 @@
+#![feature(map_get_key_value)]
+
 extern crate rand;
 extern crate sha3;
 extern crate digest;
@@ -5,6 +7,7 @@ extern crate byteorder;
 extern crate pairing;
 extern crate ibbe;
 
+use std::collections::HashMap;
 use rand::Rng;
 use sha3::{ Shake256, Sha3XofReader };
 use digest::{ Input, ExtendableOutput, XofReader };
@@ -18,7 +21,7 @@ pub const M: usize = 128;
 pub type Gt = Fq12;
 
 pub struct Pk(ibbe::Mpk);
-pub struct Sk(Vec<Option<ibbe::Sk>>);
+pub struct Sk(HashMap<usize, ibbe::Sk>);
 pub struct Ct(ibbe::Hdr);
 
 
@@ -26,8 +29,8 @@ pub fn keypair<R: Rng>(rng: &mut R) -> (Pk, Sk) {
     let (msk, mpk) = ibbe::setup(rng);
 
     let sk = (0..M)
-        .map(|i| Some(ibbe::keygen(rng, &mpk, &msk, i.to_string().as_str())))
-        .collect::<Vec<_>>();
+        .map(|i| (i, ibbe::keygen(rng, &mpk, &msk, i.to_string().as_str())))
+        .collect();
 
     (Pk(mpk), Sk(sk))
 }
@@ -44,11 +47,7 @@ pub fn dec(Sk(sks): &Sk, Ct(hdr): &Ct, tag: &str) -> Option<Gt> {
     let ids = hash(tag);
 
     let (i, sk) = ids.iter()
-        .cloned()
-        .find_map(|i| sks.get(i)
-            .and_then(|sk| sk.clone())
-            .map(|sk| (i, sk))
-        )?;
+        .find_map(|i| sks.get_key_value(i))?;
 
     ibbe::dec(
         &sk,
@@ -59,8 +58,8 @@ pub fn dec(Sk(sks): &Sk, Ct(hdr): &Ct, tag: &str) -> Option<Gt> {
 }
 
 pub fn puncture(Sk(sks): &mut Sk, tag: &str) {
-    for &i in &hash(tag) {
-        sks[i] = None;
+    for i in &hash(tag) {
+        sks.remove(i);
     }
 }
 
