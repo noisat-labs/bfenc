@@ -1,0 +1,13 @@
+[package]
+name = "bfenc"
+version = "0.1.0"
+authors = ["quininer <quininer@live.com>"]
+
+[dependencies]
+rand = "0.4"
+sha3 = "*"
+digest = "*"
+byteorder = "*"
+pairing = "0.14"
+
+ibbe = { path = "../ibbe" }
