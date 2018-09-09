@@ -33,18 +33,15 @@ pub fn keypair<R: Rng>(rng: &mut R) -> (Pk, Sk) {
 }
 
 pub fn enc<R: Rng>(rng: &mut R, Pk(pk): &Pk, tag: &str) -> (Gt, Ct) {
-    let ids = (0..K)
-        .map(|i| hash(i as u32, tag))
-        .map(|i| i.to_string());
+    let ids = hash(tag);
+    let ids = ids.iter().map(|&i| i.to_string());
 
     let (k, hdr) = ibbe::enc(rng, pk, ids);
     (k, Ct(hdr))
 }
 
 pub fn dec(Sk(sks): &Sk, Ct(hdr): &Ct, tag: &str) -> Option<Gt> {
-    let ids = (0..K)
-        .map(|i| hash(i as u32, tag))
-        .collect::<Vec<_>>();
+    let ids = hash(tag);
 
     let (i, sk) = ids.iter()
         .cloned()
@@ -57,18 +54,18 @@ pub fn dec(Sk(sks): &Sk, Ct(hdr): &Ct, tag: &str) -> Option<Gt> {
         &sk,
         hdr,
         i.to_string().as_str(),
-        ids.into_iter().map(|i| i.to_string())
+        ids.iter().map(|i| i.to_string())
     )
 }
 
 pub fn puncture(Sk(sks): &mut Sk, tag: &str) {
-    (0..K)
-        .map(|i| hash(i as u32, tag))
-        .for_each(|i| sks[i] = None);
+    for &i in &hash(tag) {
+        sks[i] = None;
+    }
 }
 
 
-fn hash(k: u32, tag: &str) -> usize {
+fn hash(tag: &str) -> [usize; K] {
     struct HashRng(Sha3XofReader);
 
     impl HashRng {
@@ -100,7 +97,20 @@ fn hash(k: u32, tag: &str) -> usize {
         }
     }
 
-    HashRng::new(k, tag).gen::<usize>() % M
+    let mut output = [0; K];
+    for i in 0..K {
+        let mut rng = HashRng::new(i as u32, tag);
+        loop {
+            let n = rng.gen::<usize>() % M;
+            if output[..i].iter().any(|&x| x == n) {
+                continue
+            } else {
+                output[i] = n;
+                break
+            }
+        }
+    }
+    output
 }
 
 
@@ -110,7 +120,7 @@ fn test_bfenc() {
 
     let mut rng = thread_rng();
     let tag1 = "Hello";
-    let tag2 = "World!";
+    let tag2 = "World";
 
     let (pk, mut sk) = keypair(&mut rng);
     let (k, ct) = enc(&mut rng, &pk, tag1);
